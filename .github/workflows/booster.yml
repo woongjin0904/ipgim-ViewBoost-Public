@@ -1,0 +1,40 @@
+name: Distributed Traffic Tester
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target URL'
+        required: true
+      site_type:
+        description: 'NAVER or FEMCO'
+        required: true
+      count_per_worker:
+        description: '각 컴퓨터당 반복 횟수'
+        default: '5'
+
+jobs:
+  boost:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        worker_id: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Dependencies
+        run: |
+          npm install
+          sudo apt-get update
+          sudo apt-get install -y libgbm-dev
+
+      - name: Run Worker
+        run: node github_worker.js "${{ github.event.inputs.target_url }}" "${{ github.event.inputs.site_type }}" "${{ github.event.inputs.count_per_worker }}"
