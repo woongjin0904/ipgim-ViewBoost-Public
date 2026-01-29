@@ -2,7 +2,6 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const UserAgent = require('user-agents');
 
-// 기존 모듈 로드 (로직 수정 없음)
 const runNaver = require('./boosters/naver');
 const runFemco = require('./boosters/fmkorea');
 
@@ -11,14 +10,28 @@ stealth.enabledEvasions.delete('user-agent-override');
 puppeteer.use(stealth);
 
 async function start() {
-    const targetUrl = process.argv[2]; // 실행 시 받은 URL
-    const siteType = process.argv[3];  // NAVER 또는 FEMCO
-    const iterations = parseInt(process.argv[4] || "1"); // 반복 횟수
+    const targetUrl = process.argv[2];
+    const siteType = process.argv[3];
+    const totalCount = parseInt(process.argv[4] || "0");
+    const workerId = parseInt(process.env.WORKER_ID || "1");
 
-    if (!targetUrl) {
-        console.error("URL이 없습니다.");
-        process.exit(1);
+    if (!targetUrl || totalCount <= 0) {
+        console.log("실행 조건 미충족. 종료.");
+        process.exit(0);
     }
+
+    // 💡 20분할 정밀 배분 로직
+    let myIterations = Math.floor(totalCount / 20);
+    if (workerId <= (totalCount % 20)) {
+        myIterations += 1;
+    }
+
+    if (myIterations <= 0) {
+        console.log(`[Worker ${workerId}] 나에게 할당된 수량이 없습니다. (총 목표: ${totalCount})`);
+        process.exit(0);
+    }
+
+    console.log(`[Worker ${workerId}] 시작. 목표: ${myIterations}회 실행 (전체: ${totalCount})`);
 
     const browser = await puppeteer.launch({
         headless: "new",
@@ -26,25 +39,28 @@ async function start() {
     });
 
     try {
-        for (let i = 1; i <= iterations; i++) {
-            console.log(`[시도 ${i}/${iterations}] ${siteType} 작업 시작...`);
+        for (let i = 1; i <= myIterations; i++) {
+            console.log(`[시도 ${i}/${myIterations}] ${siteType} 작업 진행 중...`);
             const page = await browser.newPage();
             await page.setUserAgent(new UserAgent({ deviceCategory: 'desktop' }).toString());
 
             if (siteType === 'NAVER') {
                 await runNaver(page, targetUrl, (msg) => console.log(msg));
-            } else {
+            } else if (siteType === 'FEMCO') {
                 await runFemco(page, targetUrl);
+            } else {
+                console.error(`지원하지 않는 사이트 타입: ${siteType}`);
+                break;
             }
             
             await page.close();
-            // 각 반복 사이의 랜덤 대기
-            if (i < iterations) await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
+            if (i < myIterations) await new Promise(r => setTimeout(r, 3000 + Math.random() * 2000));
         }
     } catch (e) {
-        console.error("작업 중 오류:", e.message);
+        console.error("작업 중 오류 발생:", e.message);
     } finally {
         await browser.close();
+        console.log(`[Worker ${workerId}] 모든 할당 작업 완료.`);
         process.exit(0);
     }
 }

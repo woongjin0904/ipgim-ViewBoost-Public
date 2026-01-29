@@ -9,9 +9,9 @@ on:
       site_type:
         description: 'NAVER or FEMCO'
         required: true
-      count_per_worker:
-        description: '각 컴퓨터당 반복 횟수'
-        default: '5'
+      total_count:
+        description: '전체 목표 조회수 (20대의 컴퓨터가 나누어 가짐)'
+        default: '20'
         
 concurrency:
   group: ${{ github.event.inputs.target_url }}
@@ -41,4 +41,6 @@ jobs:
           sudo apt-get install -y libgbm-dev
 
       - name: Run Worker
-        run: node github_worker.js "${{ github.event.inputs.target_url }}" "${{ github.event.inputs.site_type }}" "${{ github.event.inputs.count_per_worker }}"
+        env:
+          WORKER_ID: ${{ matrix.worker_id }}
+        run: node github_worker.js "${{ github.event.inputs.target_url }}" "${{ github.event.inputs.site_type }}" "${{ github.event.inputs.total_count }}"
