@@ -12,6 +12,10 @@ on:
       count_per_worker:
         description: '각 컴퓨터당 반복 횟수'
         default: '5'
+        
+concurrency:
+  group: ${{ github.event.inputs.target_url }}
+  cancel-in-progress: true
 
 jobs:
   boost:
