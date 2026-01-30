@@ -61,19 +61,28 @@ try {
             // [수정] 리소스 차단 로직 최적화
             await page.setRequestInterception(true);
             page.on('request', (req) => {
-                const url = req.url();
                 const type = req.resourceType();
+                const url = req.url();
 
-                // 네이버 필수 도메인 화이트리스트 (pstatic.net 추가 필수)
-                const isNaverResource = /naver\.com|naver\.net|pstatic\.net/.test(url);
-
-                if (isNaverResource) {
-                    req.continue();
-                } else if (['image', 'font', 'media'].includes(type)) {
-                    req.abort(); // 용량 큰 미디어만 차단
-                } else {
-                    req.continue();
+                // 1. 네이버 관련 필수 데이터는 무조건 허용 (차단 시 ERR_BLOCKED_BY_CLIENT 유발)
+                if (url.includes('naver.com') || url.includes('naver.net') || url.includes('pstatic.net')) {
+                    return req.continue();
                 }
+
+                // 2. 이미지, 폰트, 미디어만 차단 (네이버 카페는 CSS/JS를 차단하면 작동 안 함)
+                // 이전 코드에서 stylesheet를 차단했다면 여기서 에러가 났을 확률이 높습니다.
+                if (['image', 'font', 'media'].includes(type)) {
+                    return req.abort();
+                }
+
+                // 3. 나머지는 일단 통과 (안전 제일)
+                req.continue();
+            });
+
+            // [추가] 브라우저 지문(Fingerprint)을 좀 더 확실히 속임
+            await page.evaluateOnNewDocument(() => {
+                Object.defineProperty(navigator, 'webdriver', { get: () => false });
+                window.chrome = { runtime: {} };
             });
 
             // 실행
