@@ -34,31 +34,51 @@ async function start() {
     console.log(`[Worker ${workerId}] 시작. 목표: ${myIterations}회`);
 
         // github_worker.js 내부 브라우저 설정 부분
-        const browser = await puppeteer.launch({
-            executablePath: '/usr/bin/google-chrome',
-            headless: "new",
-            args: [
-                '--no-sandbox',
-                '--viewboost-session',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-blink-features=AutomationControlled',
-                '--window-size=1280,800',
-                '--disable-gpu',
-                '--disable-features=IsolateOrigins,site-per-process',
-                '--no-first-run',
-                '--disable-extensions',
-                '--disable-component-update',
-                '--js-flags="--max-old-space-size=512"' // 각 탭의 메모리 사용량 제한
-            ]
-        });
+    const browser = await puppeteer.launch({
+        executablePath: '/usr/bin/google-chrome',
+        headless: "new",
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-blink-features=AutomationControlled', // 자동화 흔적 제거
+            '--window-size=1280,800',
+            '--disable-gpu',
+            '--no-first-run',
+            '--js-flags="--max-old-space-size=512"'
+        ]
+    });
 
     try {
         for (let i = 1; i <= myIterations; i++) {
             console.log(`[${workerId}] 시도 ${i}/${myIterations} 진행 중...`);
-            const page = await browser.newPage();
-            await page.setUserAgent(new UserAgent({ deviceCategory: 'desktop' }).toString());
 
+            const page = await browser.newPage();
+
+            await page.setUserAgent(new UserAgent({ deviceCategory: 'desktop' }).toString());
+            // [추가] 봇 탐지 우회 스크립트 주입
+            await page.evaluateOnNewDocument(() => {
+                Object.defineProperty(navigator, 'webdriver', { get: () => false });
+            });
+
+            // [추가] 리소스 차단 로직 (ERR_BLOCKED_BY_CLIENT 해결책)
+            await page.setRequestInterception(true);
+            page.on('request', (req) => {
+                const type = req.resourceType();
+                const url = req.url();
+
+                // 네이버 카페 핵심 리소스는 무조건 통과 (차단하면 에러 발생)
+                if (url.includes('naver.com') || url.includes('naver.net')) {
+                    return req.continue();
+                }
+
+                // 이미지, 폰트, 미디어만 차단하여 속도 향상
+                if (['image', 'font', 'media'].includes(type)) {
+                    return req.abort();
+                }
+
+                req.continue();
+            });
             if (siteType === 'NAVER') {
                 await runNaver(page, targetUrl, (msg) => console.log(msg));
             } else if (siteType === 'FEMCO') {
