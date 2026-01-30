@@ -35,6 +35,7 @@ async function start() {
 
         // github_worker.js 내부 브라우저 설정 부분
         const browser = await puppeteer.launch({
+            executablePath: '/usr/bin/google-chrome',
             headless: "new",
             args: [
                 '--no-sandbox',
