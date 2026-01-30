@@ -48,51 +48,49 @@ async function start() {
             '--js-flags="--max-old-space-size=512"'
         ]
     });
-
-    try {
+try {
         for (let i = 1; i <= myIterations; i++) {
             console.log(`[${workerId}] 시도 ${i}/${myIterations} 진행 중...`);
-
             const page = await browser.newPage();
-
-            await page.setUserAgent(new UserAgent({ deviceCategory: 'desktop' }).toString());
-            // [추가] 봇 탐지 우회 스크립트 주입
+            
+            // 봇 탐지 우회
             await page.evaluateOnNewDocument(() => {
                 Object.defineProperty(navigator, 'webdriver', { get: () => false });
             });
 
-            // [추가] 리소스 차단 로직 (ERR_BLOCKED_BY_CLIENT 해결책)
+            // [수정] 리소스 차단 로직 최적화
             await page.setRequestInterception(true);
             page.on('request', (req) => {
-                const type = req.resourceType();
                 const url = req.url();
+                const type = req.resourceType();
 
-                // 네이버 카페 핵심 리소스는 무조건 통과 (차단하면 에러 발생)
-                if (url.includes('naver.com') || url.includes('naver.net')) {
-                    return req.continue();
+                // 네이버 필수 도메인 화이트리스트 (pstatic.net 추가 필수)
+                const isNaverResource = /naver\.com|naver\.net|pstatic\.net/.test(url);
+
+                if (isNaverResource) {
+                    req.continue();
+                } else if (['image', 'font', 'media'].includes(type)) {
+                    req.abort(); // 용량 큰 미디어만 차단
+                } else {
+                    req.continue();
                 }
-
-                // 이미지, 폰트, 미디어만 차단하여 속도 향상
-                if (['image', 'font', 'media'].includes(type)) {
-                    return req.abort();
-                }
-
-                req.continue();
             });
+
+            // 실행
             if (siteType === 'NAVER') {
-                await runNaver(page, targetUrl, (msg) => console.log(msg));
+                await runNaver(page, targetUrl, (msg) => console.log(`[Worker ${workerId}] ${msg}`));
             } else if (siteType === 'FEMCO') {
                 await runFemco(page, targetUrl);
             }
             
             await page.close();
-            if (i < myIterations) await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+            // 다음 시도 전 랜덤 대기
+            await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
         }
     } catch (e) {
-        console.error("오류 발생:", e.message);
+        console.error(`[Worker ${workerId}] 치명적 오류:`, e.message);
     } finally {
         await browser.close();
-        console.log(`[Worker ${workerId}] 완료.`);
         process.exit(0);
     }
 }
