@@ -2,6 +2,7 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const UserAgent = require('user-agents');
 
+// 주의: puppeteer-extra를 쓸 때도 puppeteer-core를 엔진으로 사용하도록 설정
 const runNaver = require('./boosters/naver');
 const runFemco = require('./boosters/fmkorea');
 
@@ -20,27 +21,34 @@ async function start() {
         process.exit(0);
     }
 
-    // 💡 20분할 정밀 배분 로직
     let myIterations = Math.floor(totalCount / 20);
     if (workerId <= (totalCount % 20)) {
         myIterations += 1;
     }
 
     if (myIterations <= 0) {
-        console.log(`[Worker ${workerId}] 나에게 할당된 수량이 없습니다. (총 목표: ${totalCount})`);
+        console.log(`[Worker ${workerId}] 할당량 없음.`);
         process.exit(0);
     }
 
-    console.log(`[Worker ${workerId}] 시작. 목표: ${myIterations}회 실행 (전체: ${totalCount})`);
+    console.log(`[Worker ${workerId}] 시작. 목표: ${myIterations}회`);
 
     const browser = await puppeteer.launch({
+        // 💡 핵심: 깃허브 액션에 내장된 크롬 경로 사용
+        executablePath: '/usr/bin/google-chrome',
         headless: "new",
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled']
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox', 
+            '--disable-blink-features=AutomationControlled',
+            '--disable-dev-shm-usage', // 메모리 부족 방지
+            '--disable-gpu'
+        ]
     });
 
     try {
         for (let i = 1; i <= myIterations; i++) {
-            console.log(`[시도 ${i}/${myIterations}] ${siteType} 작업 진행 중...`);
+            console.log(`[${workerId}] 시도 ${i}/${myIterations} 진행 중...`);
             const page = await browser.newPage();
             await page.setUserAgent(new UserAgent({ deviceCategory: 'desktop' }).toString());
 
@@ -48,19 +56,16 @@ async function start() {
                 await runNaver(page, targetUrl, (msg) => console.log(msg));
             } else if (siteType === 'FEMCO') {
                 await runFemco(page, targetUrl);
-            } else {
-                console.error(`지원하지 않는 사이트 타입: ${siteType}`);
-                break;
             }
             
             await page.close();
-            if (i < myIterations) await new Promise(r => setTimeout(r, 3000 + Math.random() * 2000));
+            if (i < myIterations) await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
         }
     } catch (e) {
-        console.error("작업 중 오류 발생:", e.message);
+        console.error("오류 발생:", e.message);
     } finally {
         await browser.close();
-        console.log(`[Worker ${workerId}] 모든 할당 작업 완료.`);
+        console.log(`[Worker ${workerId}] 완료.`);
         process.exit(0);
     }
 }

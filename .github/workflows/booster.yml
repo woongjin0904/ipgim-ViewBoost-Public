@@ -1,4 +1,4 @@
-name: Distributed Traffic Tester
+name: Distributed Traffic Tester (Optimized)
 
 on:
   workflow_dispatch:
@@ -10,9 +10,9 @@ on:
         description: 'NAVER or FEMCO'
         required: true
       total_count:
-        description: '전체 목표 조회수 (20대의 컴퓨터가 나누어 가짐)'
+        description: '전체 목표 조회수'
         default: '20'
-        
+
 concurrency:
   group: ${{ github.event.inputs.target_url }}
   cancel-in-progress: true
@@ -33,10 +33,13 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
+          cache: 'npm' 
 
       - name: Install Dependencies
+        env:
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'true'
         run: |
-          npm install
+          npm ci
           sudo apt-get update
           sudo apt-get install -y libgbm-dev
 
