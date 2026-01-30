@@ -33,18 +33,24 @@ async function start() {
 
     console.log(`[Worker ${workerId}] 시작. 목표: ${myIterations}회`);
 
-    const browser = await puppeteer.launch({
-        // 💡 핵심: 깃허브 액션에 내장된 크롬 경로 사용
-        executablePath: '/usr/bin/google-chrome',
-        headless: "new",
-        args: [
-            '--no-sandbox', 
-            '--disable-setuid-sandbox', 
-            '--disable-blink-features=AutomationControlled',
-            '--disable-dev-shm-usage', // 메모리 부족 방지
-            '--disable-gpu'
-        ]
-    });
+        // github_worker.js 내부 브라우저 설정 부분
+        const browser = await puppeteer.launch({
+            headless: "new",
+            args: [
+                '--no-sandbox',
+                '--viewboost-session',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-blink-features=AutomationControlled',
+                '--window-size=1280,800',
+                '--disable-gpu',
+                '--disable-features=IsolateOrigins,site-per-process',
+                '--no-first-run',
+                '--disable-extensions',
+                '--disable-component-update',
+                '--js-flags="--max-old-space-size=512"' // 각 탭의 메모리 사용량 제한
+            ]
+        });
 
     try {
         for (let i = 1; i <= myIterations; i++) {

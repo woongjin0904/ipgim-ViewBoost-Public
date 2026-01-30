@@ -46,4 +46,8 @@ jobs:
       - name: Run Worker
         env:
           WORKER_ID: ${{ matrix.worker_id }}
-        run: node github_worker.js "${{ github.event.inputs.target_url }}" "${{ github.event.inputs.site_type }}" "${{ github.event.inputs.total_count }}"
+        run: |
+          DELAY=$((1 + RANDOM % 120))
+          echo "Waiting for $DELAY seconds to bypass anti-bot..."
+          sleep $DELAY
+          node github_worker.js "${{ github.event.inputs.target_url }}" "${{ github.event.inputs.site_type }}" "${{ github.event.inputs.total_count }}"
