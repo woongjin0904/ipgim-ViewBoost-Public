@@ -1,13 +1,9 @@
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-const UserAgent = require('user-agents');
-
-// 주의: puppeteer-extra를 쓸 때도 puppeteer-core를 엔진으로 사용하도록 설정
-const runNaver = require('./boosters/naver');
-const runFemco = require('./boosters/fmkorea');
+const UserAgent = require('user-agents'); // 설치 확인 필요: npm install user-agents
 
 const stealth = StealthPlugin();
-stealth.enabledEvasions.delete('user-agent-override');
+// Stealth 플러그인이 UA 오버라이드를 제어하게 두는 것이 더 안전합니다.
 puppeteer.use(stealth);
 
 async function start() {
@@ -17,84 +13,75 @@ async function start() {
     const workerId = parseInt(process.env.WORKER_ID || "1");
 
     if (!targetUrl || totalCount <= 0) {
-        console.log("실행 조건 미충족. 종료.");
         process.exit(0);
     }
 
     let myIterations = Math.floor(totalCount / 20);
-    if (workerId <= (totalCount % 20)) {
-        myIterations += 1;
-    }
+    if (workerId <= (totalCount % 20)) myIterations += 1;
 
-    if (myIterations <= 0) {
-        console.log(`[Worker ${workerId}] 할당량 없음.`);
-        process.exit(0);
-    }
+    console.log(`[Worker ${workerId}] 시작. 할당량: ${myIterations}회`);
 
-    console.log(`[Worker ${workerId}] 시작. 목표: ${myIterations}회`);
-
-        // github_worker.js 내부 브라우저 설정 부분
+    // 브라우저 실행 (최대한 일반 크롬처럼 보이게 설정)
     const browser = await puppeteer.launch({
         executablePath: '/usr/bin/google-chrome',
         headless: "new",
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-blink-features=AutomationControlled', // 자동화 흔적 제거
-            '--window-size=1280,800',
-            '--disable-gpu',
-            '--no-first-run',
-            '--js-flags="--max-old-space-size=512"'
+            '--disable-blink-features=AutomationControlled',
+            '--disable-infobars',
+            '--window-size=1920,1080',
+            '--lang=ko_KR'
         ]
     });
-try {
+
+    try {
         for (let i = 1; i <= myIterations; i++) {
-            console.log(`[${workerId}] 시도 ${i}/${myIterations} 진행 중...`);
-            const page = await browser.newPage();
-            
-            // 봇 탐지 우회
-            await page.evaluateOnNewDocument(() => {
-                Object.defineProperty(navigator, 'webdriver', { get: () => false });
+            // 1. 매번 독립된 브라우저 컨텍스트(Incognito 모드 효과) 생성
+            const context = await browser.createBrowserContext();
+            const page = await context.newPage();
+
+            // 2. 랜덤 User-Agent 설정
+            const userAgent = new UserAgent({ deviceCategory: 'desktop' });
+            await page.setUserAgent(userAgent.toString());
+
+            // 3. 화면 크기 랜덤화 (브라우저 지문 다양화)
+            await page.setViewport({
+                width: 1280 + Math.floor(Math.random() * 500),
+                height: 800 + Math.floor(Math.random() * 200),
+                deviceScaleFactor: 1,
             });
 
-            // [수정] 리소스 차단 로직 최적화
+            // 4. 리소스 차단 최적화 (lcs.naver.com 로그 스크립트는 절대 차단 금지)
             await page.setRequestInterception(true);
             page.on('request', (req) => {
                 const type = req.resourceType();
                 const url = req.url();
-
-                // 1. 네이버 관련 필수 데이터는 무조건 허용 (차단 시 ERR_BLOCKED_BY_CLIENT 유발)
-                if (url.includes('naver.com') || url.includes('naver.net') || url.includes('pstatic.net')) {
-                    return req.continue();
-                }
-
-                // 2. 이미지, 폰트, 미디어만 차단 (네이버 카페는 CSS/JS를 차단하면 작동 안 함)
-                // 이전 코드에서 stylesheet를 차단했다면 여기서 에러가 났을 확률이 높습니다.
                 if (['image', 'font', 'media'].includes(type)) {
-                    return req.abort();
+                    req.abort();
+                } else {
+                    req.continue();
                 }
-
-                // 3. 나머지는 일단 통과 (안전 제일)
-                req.continue();
             });
 
-            // [추가] 브라우저 지문(Fingerprint)을 좀 더 확실히 속임
-            await page.evaluateOnNewDocument(() => {
-                Object.defineProperty(navigator, 'webdriver', { get: () => false });
-                window.chrome = { runtime: {} };
-            });
+            console.log(`[Worker ${workerId}] 시도 ${i}/${myIterations}...`);
 
-            // 실행
-            if (siteType === 'NAVER') {
-                await runNaver(page, targetUrl, (msg) => console.log(`[Worker ${workerId}] ${msg}`));
-            } else if (siteType === 'FEMCO') {
-                await runFemco(page, targetUrl);
+            try {
+                if (siteType === 'NAVER') {
+                    await runNaver(page, targetUrl, (msg) => console.log(`[W ${workerId}] ${msg}`));
+                } else if (siteType === 'FEMCO') {
+                    await runFemco(page, targetUrl);
+                }
+            } catch (err) {
+                console.log(`[Worker ${workerId}] 개별 페이지 오류 건너뜀`);
             }
-            
-            await page.close();
-            // 다음 시도 전 랜덤 대기
-            await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
+
+            // 5. 컨텍스트 닫기 (쿠키/세션 완전 삭제)
+            await context.close();
+
+            // 대기 시간 증가 (네이버는 너무 빠르면 봇으로 간주)
+            const wait = 5000 + Math.random() * 5000;
+            await new Promise(r => setTimeout(r, wait));
         }
     } catch (e) {
         console.error(`[Worker ${workerId}] 치명적 오류:`, e.message);
