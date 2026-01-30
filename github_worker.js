@@ -1,13 +1,13 @@
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-const UserAgent = require('user-agents'); // 설치 필수: npm install user-agents
+const UserAgent = require('user-agents');
 
 // [기존 유지] 네이버 및 펨코 로직 임포트
 const runNaver = require('./boosters/naver');
 const runFemco = require('./boosters/fmkorea');
 
 const stealth = StealthPlugin();
-// [기존 유지] UA 오버라이드 비활성화 (직접 설정하기 위함)
+// [기존 유지] user-agent-override 삭제 설정 유지
 stealth.enabledEvasions.delete('user-agent-override');
 puppeteer.use(stealth);
 
@@ -22,7 +22,7 @@ async function start() {
         process.exit(0);
     }
 
-    // [기존 유지] 워커별 할당량 계산 로직
+    // [기존 유지] 워커 할당량 계산 로직
     let myIterations = Math.floor(totalCount / 20);
     if (workerId <= (totalCount % 20)) {
         myIterations += 1;
@@ -35,6 +35,7 @@ async function start() {
 
     console.log(`[Worker ${workerId}] 시작. 목표: ${myIterations}회`);
 
+    // [기존 유지] 브라우저 설정 유지
     const browser = await puppeteer.launch({
         executablePath: '/usr/bin/google-chrome',
         headless: "new",
@@ -53,51 +54,61 @@ async function start() {
     try {
         for (let i = 1; i <= myIterations; i++) {
             console.log(`[${workerId}] 시도 ${i}/${myIterations} 진행 중...`);
-            
-            // [보강] 매 시도마다 완전히 새로운 브라우저 컨텍스트 사용 (쿠키/세션 분리)
-            const context = await browser.createBrowserContext();
-            const page = await context.newPage();
-            
-            // [보강] 랜덤 User-Agent 생성 및 적용
-            const ua = new UserAgent({ deviceCategory: 'desktop' }).toString();
-            await page.setUserAgent(ua);
 
-            // [기존 유지] 봇 탐지 우회 설정
+            // [수정] 에러 방지용 컨텍스트 생성 로직 (함수 존재 여부 체크)
+            let context;
+            if (typeof browser.createIncognitoBrowserContext === 'function') {
+                context = await browser.createIncognitoBrowserContext();
+            } else if (typeof browser.createBrowserContext === 'function') {
+                context = await browser.createBrowserContext();
+            } else {
+                context = browser; // 함수가 없는 경우 기본 브라우저 사용
+            }
+
+            const page = await (context === browser ? browser.newPage() : context.newPage());
+            
+            // [추가] 랜덤 User-Agent 적용 (조회수 누락 방지 핵심)
+            const userAgent = new UserAgent({ deviceCategory: 'desktop' });
+            await page.setUserAgent(userAgent.toString());
+
+            // [기존 유지] 봇 탐지 우회 로직
             await page.evaluateOnNewDocument(() => {
                 Object.defineProperty(navigator, 'webdriver', { get: () => false });
                 window.chrome = { runtime: {} };
             });
 
-            // [수정/보강] 리소스 차단 로직 최적화 (조회수 로그 스크립트 허용)
+            // [기존 유지 및 최적화] 리소스 차단 로직
             await page.setRequestInterception(true);
             page.on('request', (req) => {
                 const type = req.resourceType();
                 const url = req.url();
 
-                // 네이버 분석 스크립트(lcs.naver.com)는 절대 차단하면 안 됩니다.
                 if (url.includes('naver.com') || url.includes('naver.net') || url.includes('pstatic.net')) {
                     return req.continue();
                 }
 
-                // 이미지와 폰트만 차단하여 속도 향상
                 if (['image', 'font', 'media'].includes(type)) {
                     return req.abort();
                 }
                 req.continue();
             });
 
-            // [기존 유지] 사이트별 실행 분기
+            // [기존 유지] 사이트 실행 로직
             if (siteType === 'NAVER') {
                 await runNaver(page, targetUrl, (msg) => console.log(`[Worker ${workerId}] ${msg}`));
             } else if (siteType === 'FEMCO') {
                 await runFemco(page, targetUrl);
             }
             
-            // [보강] 페이지가 아닌 컨텍스트를 닫아 데이터 완전 삭제
-            await context.close();
-            
-            // [기존 유지] 다음 시도 전 랜덤 대기
-            await new Promise(r => setTimeout(r, 3000 + Math.random() * 4000));
+            // [수정] 세션 종료 및 정리
+            if (context !== browser) {
+                await context.close();
+            } else {
+                await page.close();
+            }
+
+            // [기존 유지] 랜덤 대기 시간
+            await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
         }
     } catch (e) {
         console.error(`[Worker ${workerId}] 치명적 오류:`, e.message);
