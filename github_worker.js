@@ -2,14 +2,39 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const UserAgent = require('user-agents');
 
-// [기존 유지] 네이버 및 펨코 로직 임포트
-const runNaver = require('./boosters/naver');
+// [추가] 모든 부스터 모듈 임포트 (경로가 깃허브 레포지토리 내에 있어야 합니다)
+const runInstiz = require('./boosters/instiz');
+const runTheqoo = require('./boosters/theqoo');
+const runPpomppu = require('./boosters/ppomppu');
 const runFemco = require('./boosters/fmkorea');
+const runNaver = require('./boosters/naver');
+const runRuliweb = require('./boosters/ruliweb');
+const runQuasarzone = require('./boosters/quasarzone');
+const runArcalive = require('./boosters/arcalive');
+const runInven = require('./boosters/inven');
+const runDogdrip = require('./boosters/dogdrip');
+const runDcinside = require('./boosters/dcinside');
+const runDonppu = require('./boosters/donppu');
 
 const stealth = StealthPlugin();
-// [기존 유지] user-agent-override 삭제 설정 유지
 stealth.enabledEvasions.delete('user-agent-override');
 puppeteer.use(stealth);
+
+// [추가] 사이트 타입별 실행 매핑 객체
+const boosters = {
+    INSTIZ: runInstiz,
+    THEQOO: runTheqoo,
+    PPOMPPU: runPpomppu,
+    FEMCO: runFemco,
+    NAVER: runNaver,
+    RULIWEB: runRuliweb,
+    QUASARZONE: runQuasarzone,
+    ARCALIVE: runArcalive,
+    INVEN: runInven,
+    DOGDRIP: runDogdrip,
+    DCINSIDE: runDcinside,
+    DONPPU: runDonppu
+};
 
 async function start() {
     const targetUrl = process.argv[2];
@@ -22,7 +47,6 @@ async function start() {
         process.exit(0);
     }
 
-    // [기존 유지] 워커 할당량 계산 로직
     let myIterations = Math.floor(totalCount / 20);
     if (workerId <= (totalCount % 20)) {
         myIterations += 1;
@@ -33,9 +57,8 @@ async function start() {
         process.exit(0);
     }
 
-    console.log(`[Worker ${workerId}] 시작. 목표: ${myIterations}회`);
+    console.log(`[Worker ${workerId}] 시작. 사이트: ${siteType}, 목표: ${myIterations}회`);
 
-    // [기존 유지] 브라우저 설정 유지
     const browser = await puppeteer.launch({
         executablePath: '/usr/bin/google-chrome',
         headless: "new",
@@ -55,63 +78,58 @@ async function start() {
         for (let i = 1; i <= myIterations; i++) {
             console.log(`[${workerId}] 시도 ${i}/${myIterations} 진행 중...`);
 
-            // [수정] 에러 방지용 컨텍스트 생성 로직 (함수 존재 여부 체크)
             let context;
             if (typeof browser.createIncognitoBrowserContext === 'function') {
                 context = await browser.createIncognitoBrowserContext();
-            } else if (typeof browser.createBrowserContext === 'function') {
-                context = await browser.createBrowserContext();
             } else {
-                context = browser; // 함수가 없는 경우 기본 브라우저 사용
+                context = browser; 
             }
 
             const page = await (context === browser ? browser.newPage() : context.newPage());
             
-            // [추가] 랜덤 User-Agent 적용 (조회수 누락 방지 핵심)
             const userAgent = new UserAgent({ deviceCategory: 'desktop' });
             await page.setUserAgent(userAgent.toString());
 
-            // [기존 유지] 봇 탐지 우회 로직
             await page.evaluateOnNewDocument(() => {
                 Object.defineProperty(navigator, 'webdriver', { get: () => false });
                 window.chrome = { runtime: {} };
             });
 
-            // [기존 유지 및 최적화] 리소스 차단 로직
             await page.setRequestInterception(true);
             page.on('request', (req) => {
                 const type = req.resourceType();
-                const url = req.url();
-
-                if (url.includes('naver.com') || url.includes('naver.net') || url.includes('pstatic.net')) {
+                // 네이버 관련 리소스는 허용, 그 외 이미지/폰트 등은 차단하여 속도 향상
+                if (req.url().includes('naver.com') || req.url().includes('naver.net')) {
                     return req.continue();
                 }
-
                 if (['image', 'font', 'media'].includes(type)) {
                     return req.abort();
                 }
                 req.continue();
             });
 
-            // [기존 유지] 사이트 실행 로직
-            if (siteType === 'NAVER') {
-                await runNaver(page, targetUrl, (msg) => console.log(`[Worker ${workerId}] ${msg}`));
-            } else if (siteType === 'FEMCO') {
-                await runFemco(page, targetUrl);
+            // [수정된 핵심 로직] 매핑 객체를 사용하여 모든 사이트 대응
+            const runBooster = boosters[siteType];
+            if (runBooster) {
+                // 부스터 실행 (성공/실패 여부와 상관없이 시도)
+                await runBooster(page, targetUrl, (msg) => console.log(`[Worker ${workerId}] ${msg}`)).catch(e => {
+                    console.log(`[Worker ${workerId}] 개별 시도 에러: ${e.message}`);
+                });
+            } else {
+                console.log(`[Worker ${workerId}] 지원하지 않는 사이트 타입: ${siteType}`);
+                break; 
             }
             
-            // [수정] 세션 종료 및 정리
             if (context !== browser) {
                 await context.close();
             } else {
                 await page.close();
             }
 
-            // [기존 유지] 랜덤 대기 시간
             await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
         }
     } catch (e) {
-        console.error(`[Worker ${workerId}] 치명적 오류:`, e.message);
+        console.error(`[Worker ${workerId}] 치명적 에러:`, e.message);
     } finally {
         await browser.close();
         process.exit(0);
