@@ -15,6 +15,7 @@ const runInven = require('./boosters/inven');
 const runDogdrip = require('./boosters/dogdrip');
 const runDcinside = require('./boosters/dcinside');
 const runDonppu = require('./boosters/donppu');
+const runDaum = require('./boosters/daum');
 
 const stealth = StealthPlugin();
 stealth.enabledEvasions.delete('user-agent-override');
@@ -33,7 +34,8 @@ const boosters = {
     INVEN: runInven,
     DOGDRIP: runDogdrip,
     DCINSIDE: runDcinside,
-    DONPPU: runDonppu
+    DONPPU: runDonppu,
+    DAUM: runDaum
 };
 
 async function start() {
@@ -111,17 +113,23 @@ async function start() {
 
                 await page.setRequestInterception(true);
                 page.on('request', (req) => {
+                    const url = req.url();
                     const type = req.resourceType();
-                    // 네이버 관련 리소스는 허용, 그 외 이미지/폰트 등은 차단하여 속도 향상
-                    if (req.url().includes('naver.com') || req.url().includes('naver.net')) {
+                    
+                    // [수정] 네이버 및 다음 관련 핵심 리소스 허용 (아이프레임 로드 필수)
+                    const allowedDomains = ['naver.com', 'naver.net', 'daum.net', 'daumcdn.net', 'kakao.com'];
+                    const isAllowedDomain = allowedDomains.some(domain => url.includes(domain));
+
+                    if (isAllowedDomain) {
                         return req.continue();
                     }
+
+                    // 속도 향상을 위해 이미지, 폰트, 미디어 차단
                     if (['image', 'font', 'media'].includes(type)) {
                         return req.abort();
                     }
                     req.continue();
                 });
-
                 // [수정된 핵심 로직] 매핑 객체를 사용하여 모든 사이트 대응
                 const runBooster = boosters[siteType];
                 if (runBooster) {
