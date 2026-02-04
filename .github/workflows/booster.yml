@@ -14,7 +14,7 @@ on:
         default: '20'
 
 concurrency:
-  group: ${{ github.event.inputs.target_url }}
+  group: viewboost-engine-global
   cancel-in-progress: true
 
 jobs:
