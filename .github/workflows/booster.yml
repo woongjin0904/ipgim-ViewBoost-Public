@@ -1,5 +1,8 @@
 name: Distributed Traffic Tester (Optimized)
 
+# [수정] 실행 이름에 user_id를 포함시켜 서버 API에서 정밀 취소가 가능하게 합니다.
+run-name: Booster-Task-${{ inputs.user_id }}
+
 on:
   workflow_dispatch:
     inputs:
@@ -7,14 +10,20 @@ on:
         description: 'Target URL'
         required: true
       site_type:
-        description: 'NAVER or FEMCO'
+        description: 'Site Type (NAVER, FEMCO, etc.)'
         required: true
       total_count:
-        description: '전체 목표 조회수'
+        description: 'Total Target Count'
         default: '20'
+      # [추가] 사용자 식별을 위한 ID
+      user_id:
+        description: 'Requested User ID'
+        required: true
 
+# [핵심 수정] 그룹명을 전역이 아닌 유저별 ID로 설정합니다.
+# 이렇게 하면 '나'의 새 작업이 '나'의 옛 작업만 취소하며, 다른 유저의 작업은 건드리지 않습니다.
 concurrency:
-  group: viewboost-engine-global
+  group: viewboost-${{ inputs.user_id }}
   cancel-in-progress: true
 
 jobs:
@@ -33,14 +42,14 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
-          cache: 'npm' 
+          cache: 'npm'
 
       - name: Install Dependencies
         env:
           PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'true'
         run: |
+          # 💡 의존성 설치 최적화
           npm install puppeteer-extra puppeteer-extra-plugin-stealth user-agents
-          npm ci || true
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable libgbm-dev
 
@@ -48,7 +57,9 @@ jobs:
         env:
           WORKER_ID: ${{ matrix.worker_id }}
         run: |
-          DELAY=$((1 + RANDOM % 150))
-          echo "Waiting for $DELAY seconds to bypass anti-bot..."
+          # 워커 간 기동 시간 분산 (안티 봇)
+          DELAY=$((1 + RANDOM % 60))
+          echo "Waiting for $DELAY seconds..."
           sleep $DELAY
-          node github_worker.js "${{ github.event.inputs.target_url }}" "${{ github.event.inputs.site_type }}" "${{ github.event.inputs.total_count }}"
+          # [수정] 인수에 user_id 추가 전달
+          node github_worker.js "${{ github.event.inputs.target_url }}" "${{ github.event.inputs.site_type }}" "${{ github.event.inputs.total_count }}" "${{ github.event.inputs.user_id }}"
