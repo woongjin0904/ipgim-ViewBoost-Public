@@ -2,7 +2,6 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const UserAgent = require('user-agents');
 
-// 부스터 모듈 임포트
 const runInstiz = require('./boosters/instiz');
 const runTheqoo = require('./boosters/theqoo');
 const runPpomppu = require('./boosters/ppomppu');
@@ -16,6 +15,7 @@ const runDogdrip = require('./boosters/dogdrip');
 const runDcinside = require('./boosters/dcinside');
 const runDonppu = require('./boosters/donppu');
 const runDaum = require('./boosters/daum');
+const runDimitory = require('./boosters/dimitory');
 
 const stealth = StealthPlugin();
 stealth.enabledEvasions.delete('user-agent-override');
@@ -25,11 +25,11 @@ const boosters = {
     INSTIZ: runInstiz, THEQOO: runTheqoo, PPOMPPU: runPpomppu,
     FEMCO: runFemco, NAVER: runNaver, RULIWEB: runRuliweb,
     QUASARZONE: runQuasarzone, ARCALIVE: runArcalive, INVEN: runInven,
-    DOGDRIP: runDogdrip, DCINSIDE: runDcinside, DONPPU: runDonppu, DAUM: runDaum
+    DOGDRIP: runDogdrip, DCINSIDE: runDcinside, DONPPU: runDonppu, DAUM: runDaum,
+    DIMITORY: runDimitory
 };
 
 async function start() {
-    // [수정] 5번째 인자로 userId를 받도록 설정
     const targetUrl = process.argv[2];
     const siteType = process.argv[3];
     const totalCount = parseInt(process.argv[4] || "0");
@@ -41,7 +41,6 @@ async function start() {
         process.exit(0);
     }
 
-    // 할당량 계산 (20개 워커 분할 로직)
     let myIterations = Math.floor(totalCount / 20);
     if (workerId <= (totalCount % 20)) {
         myIterations += 1;
@@ -111,7 +110,6 @@ async function start() {
 
                 const runBooster = boosters[siteType];
                 if (runBooster) {
-                    // [핵심] userId와 workerId를 포함하여 부스터 로그 남김
                     await runBooster(page, targetUrl, (msg) => 
                         console.log(`[${userId}][W${workerId}] ${msg}`)
                     ).catch(e => {
@@ -125,7 +123,6 @@ async function start() {
                 if (context !== browser) await context.close().catch(() => {});
                 else await page.close().catch(() => {});
 
-                // 안티봇 지연 (랜덤성 부여)
                 await new Promise(r => setTimeout(r, 1500 + Math.random() * 2500));
 
             } catch (iterationError) {
