@@ -17,6 +17,7 @@ const runDonppu = require('./boosters/donppu');
 const runDaum = require('./boosters/daum');
 const runDimitory = require('./boosters/dimitory');
 const runFancug = require('./boosters/fancug');
+const runThredic = require('./boosters/thredic');
 
 const stealth = StealthPlugin();
 stealth.enabledEvasions.delete('user-agent-override');
