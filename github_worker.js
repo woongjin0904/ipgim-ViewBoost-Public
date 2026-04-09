@@ -28,7 +28,7 @@ const boosters = {
     FEMCO: runFemco, NAVER: runNaver, RULIWEB: runRuliweb,
     QUASARZONE: runQuasarzone, ARCALIVE: runArcalive, INVEN: runInven,
     DOGDRIP: runDogdrip, DCINSIDE: runDcinside, DONPPU: runDonppu, DAUM: runDaum,
-    DIMITORY: runDimitory, FANCUG: runFancug
+    DIMITORY: runDimitory, FANCUG: runFancug, THREDIC: runThredic
 };
 
 async function start() {
