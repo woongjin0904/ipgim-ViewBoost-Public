@@ -18,6 +18,7 @@ const runDaum = require('./boosters/daum');
 const runDimitory = require('./boosters/dimitory');
 const runFancug = require('./boosters/fancug');
 const runThredic = require('./boosters/thredic');
+const runEtoland = require('./boosters/etoland');
 
 const stealth = StealthPlugin();
 stealth.enabledEvasions.delete('user-agent-override');
@@ -28,7 +29,7 @@ const boosters = {
     FEMCO: runFemco, NAVER: runNaver, RULIWEB: runRuliweb,
     QUASARZONE: runQuasarzone, ARCALIVE: runArcalive, INVEN: runInven,
     DOGDRIP: runDogdrip, DCINSIDE: runDcinside, DONPPU: runDonppu, DAUM: runDaum,
-    DIMITORY: runDimitory, FANCUG: runFancug, THREDIC: runThredic
+    DIMITORY: runDimitory, FANCUG: runFancug, THREDIC: runThredic, ETOLAND: runEtoland
 };
 
 async function start() {
