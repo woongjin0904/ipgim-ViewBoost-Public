@@ -175,7 +175,6 @@ async function start() {
                     }
                     return getParameter.call(this, parameter);
                 };
-            });
                     // 권한(Permissions) API 모방 (알림 권한 거부 상태로)
                     const originalQuery = window.navigator.permissions.query;
                     return window.navigator.permissions.query = (parameters) => (
@@ -227,3 +226,5 @@ async function start() {
 }
 
 start();
+
+
