@@ -19,6 +19,7 @@ const runDimitory = require('./boosters/dimitory');
 const runFancug = require('./boosters/fancug');
 const runThredic = require('./boosters/thredic');
 const runEtoland = require('./boosters/etoland');
+const runNatepann = require('./boosters/natepann'); 
 
 const stealth = StealthPlugin();
 stealth.enabledEvasions.delete('user-agent-override');
@@ -29,7 +30,8 @@ const boosters = {
     FEMCO: runFemco, NAVER: runNaver, RULIWEB: runRuliweb,
     QUASARZONE: runQuasarzone, ARCALIVE: runArcalive, INVEN: runInven,
     DOGDRIP: runDogdrip, DCINSIDE: runDcinside, DONPPU: runDonppu, DAUM: runDaum,
-    DIMITORY: runDimitory, FANCUG: runFancug, THREDIC: runThredic, ETOLAND: runEtoland
+    DIMITORY: runDimitory, FANCUG: runFancug, THREDIC: runThredic, ETOLAND: runEtoland,
+    NATEPANN: runNatepann
 };
 
 async function start() {
@@ -105,7 +107,7 @@ async function start() {
                 page.on('request', (req) => {
                     const url = req.url();
                     const type = req.resourceType();
-                    const allowedDomains = ['naver.com', 'naver.net', 'daum.net', 'daumcdn.net', 'kakao.com'];
+                    const allowedDomains = ['naver.com', 'naver.net', 'daum.net', 'daumcdn.net', 'kakao.com', 'nate.com'];
                     if (allowedDomains.some(domain => url.includes(domain))) return req.continue();
                     if (['image', 'font', 'media'].includes(type)) return req.abort();
                     req.continue();
