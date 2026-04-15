@@ -1,47 +1,57 @@
-module.exports = async (page, url, addLog) => {
+module.exports = async (page, url, log) => {
     try {
+        // 1. 초기화
         const client = await page.target().createCDPSession();
         await client.send('Network.clearBrowserCookies');
         await client.send('Network.clearBrowserCache');
 
-        // 모바일 접속 대응 (옵션)
-        const isM = url.includes('m.pann.nate.com');
-        await page.setUserAgent(isM 
-            ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1' 
-            : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
-        
-        await page.setViewport(isM 
-            ? { width: 375, height: 812, isMobile: true, hasTouch: true } 
-            : { width: 1440, height: 900 });
+        // 2. 모바일 환경으로 완벽 위장 (네이트판은 모바일 트래픽이 우회에 유리함)
+        await page.setUserAgent('Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36');
+        await page.setViewport({ width: 412, height: 915, isMobile: true, hasTouch: true });
 
-        const referers = ['https://pann.nate.com/', 'https://www.nate.com/', 'https://search.naver.com/'];
-        await page.setExtraHTTPHeaders({ 
-            'referer': referers[Math.floor(Math.random() * referers.length)],
-            'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
+        // URL 파싱 (예: https://pann.nate.com/talk/372... -> https://pann.nate.com/talk)
+        const urlObj = new URL(url);
+        const baseUrl = `${urlObj.origin}`;
+        const boardUrl = `${baseUrl}/talk`; // 네이트판 톡 메인
+
+        // 3. 우회 1단계: 게시판 목록 페이지 선 접속 (쿠키 발급 및 자연스러운 흐름 생성)
+        if (log) log(`[NATEPANN] 세션 획득을 위해 톡 메인 페이지 우회 접속 중...`);
+        await page.goto(boardUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        
+        // 페이지 로드 후 잠시 대기 (사람처럼)
+        await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+
+        // 4. 우회 2단계: 헤더에 Referer 삽입 후 실제 게시글 진입
+        if (log) log(`[NATEPANN] 정상 트래픽으로 위장하여 타겟 게시물 진입`);
+        await page.setExtraHTTPHeaders({
+            'referer': boardUrl, // 직전에 목록 페이지에 있었다는 증명
+            'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8'
         });
 
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 40000 });
 
-        // 마우스 클릭 및 스크롤 발생
-        const randomX = isM ? 180 : 400;
-        const randomY = isM ? 250 : 350;
-        await page.mouse.click(randomX, randomY + Math.random() * 50).catch(() => {}); 
-        
+        // 5. 우회 3단계: 조회수 API 트리거를 위한 인간 모방 스크롤 및 클릭
         await page.evaluate(async () => {
-            const totalScroll = 600 + Math.floor(Math.random() * 400);
-            const step = 100;
-            for (let i = 0; i < totalScroll; i += step) {
-                window.scrollBy({ top: step, behavior: 'smooth' });
-                await new Promise(r => setTimeout(r, 300 + Math.random() * 200)); 
+            const scrollSteps = 4 + Math.floor(Math.random() * 3);
+            for (let i = 0; i < scrollSteps; i++) {
+                // 모바일 환경에 맞는 부드러운 스크롤
+                window.scrollBy({ top: 300 + Math.random() * 250, behavior: 'smooth' });
+                await new Promise(r => setTimeout(r, 800 + Math.random() * 1200));
             }
         });
 
-        const stayTime = 7000 + Math.floor(Math.random() * 3000);
+        // 본문 영역 무작위 터치(클릭) 이벤트 발생
+        await page.mouse.click(200 + Math.random() * 100, 400 + Math.random() * 200);
+
+        // 6. 충분한 체류 시간 확보 (조회수 서버 반영 대기)
+        // 네이트판은 체류 시간이 10~15초 이상 요구될 수 있습니다.
+        const stayTime = 18000 + Math.floor(Math.random() * 8000); 
+        if (log) log(`[NATEPANN] 서버 데이터 반영 대기 중... (${(stayTime/1000).toFixed(1)}초)`);
         await new Promise(r => setTimeout(r, stayTime));
 
         return true;
     } catch (e) {
-        if(addLog) addLog(`[NATEPANN] 부스팅 에러: ${e.message}`);
+        if (log) log(`[NATEPANN 에러] ${e.message}`);
         return false;
     }
 };
