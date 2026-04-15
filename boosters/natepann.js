@@ -20,7 +20,7 @@ module.exports = async (page, url, addLog) => {
             'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
         });
 
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
 
         // 마우스 클릭 및 스크롤 발생
         const randomX = isM ? 180 : 400;
