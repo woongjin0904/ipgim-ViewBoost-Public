@@ -2,7 +2,6 @@ module.exports = async (page, url) => {
     const isM = url.includes('m.ppomppu.co.kr');
 
     try {
-
         const client = await page.target().createCDPSession();
         await client.send('Network.clearBrowserCookies');
         await client.send('Network.clearBrowserCache');
@@ -14,6 +13,25 @@ module.exports = async (page, url) => {
         await page.setViewport(isM 
             ? { width: 390, height: 844, isMobile: true, hasTouch: true } 
             : { width: 1440, height: 900 });
+
+        // 🛡️ [핵심 추가 우회 로직] 브라우저 내부 지문(Fingerprint) 위장
+        // 페이지의 HTML이 로드되기 전에 먼저 실행되어 봇 탐지 센서를 무력화합니다.
+        await page.evaluateOnNewDocument(() => {
+            // 1. "나는 로봇(Webdriver)이 아닙니다" 라고 브라우저 속성 덮어쓰기
+            Object.defineProperty(navigator, 'webdriver', { get: () => false });
+            
+            // 2. 가상의 크롬 객체 생성 (일반 크롬 브라우저처럼 보이게 함)
+            window.chrome = {
+                runtime: {},
+                loadTimes: function() {},
+                csi: function() {},
+                app: {}
+            };
+
+            // 3. 플러그인 개수 속이기 (봇 브라우저는 보통 플러그인이 0개임)
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['ko-KR', 'ko', 'en-US', 'en'] });
+        });
 
         const boardId = url.split('id=')[1]?.split('&')[0];
         let referer = isM ? 'https://m.ppomppu.co.kr/' : 'https://www.ppomppu.co.kr/';
