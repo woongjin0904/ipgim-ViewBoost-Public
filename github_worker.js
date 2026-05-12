@@ -33,7 +33,7 @@ const boosters = {
     QUASARZONE: runQuasarzone, ARCALIVE: runArcalive, INVEN: runInven,
     DOGDRIP: runDogdrip, DCINSIDE: runDcinside, DONPPU: runDonppu, DAUM: runDaum,
     DIMITORY: runDimitory, FANCUG: runFancug, THREDIC: runThredic, ETOLAND: runEtoland,
-    NATEPANN: runNatepann, BOBAEDREAM: runBobaedream, MLBPARK: runMlbpark
+    NATEPANN: runNatepann, BOBAEDREAM: runBobaedream, MLBPARK: runMlbpark,
 };
 
 async function start() {
