@@ -23,6 +23,7 @@ const runNatepann = require('./boosters/natepann');
 const runBobaedream = require('./boosters/bobaedream');
 const runMlbpark = require('./boosters/mlbpark'); 
 const runEomisae = require('./boosters/eomisae');
+const runMimint = require('./boosters/mimint');
 
 const stealth = StealthPlugin();
 stealth.enabledEvasions.delete('user-agent-override');
@@ -35,7 +36,7 @@ const boosters = {
     DOGDRIP: runDogdrip, DCINSIDE: runDcinside, DONPPU: runDonppu, DAUM: runDaum,
     DIMITORY: runDimitory, FANCUG: runFancug, THREDIC: runThredic, ETOLAND: runEtoland,
     NATEPANN: runNatepann, BOBAEDREAM: runBobaedream, MLBPARK: runMlbpark,
-    EOMISAE: runEomisae
+    EOMISAE: runEomisae, MIMINT: runMimint
 };
 
 async function start() {
