@@ -25,6 +25,7 @@ const runMlbpark = require('./boosters/mlbpark');
 const runEomisae = require('./boosters/eomisae');
 const runMimint = require('./boosters/mimint');
 const runJayoung = require('./boosters/jayoung');
+const runNaverKin = require('./boosters/naver_kin');
 
 const stealth = StealthPlugin();
 stealth.enabledEvasions.delete('user-agent-override');
@@ -32,7 +33,7 @@ puppeteer.use(stealth);
 
 const boosters = {
     INSTIZ: runInstiz, THEQOO: runTheqoo, PPOMPPU: runPpomppu,
-    FEMCO: runFemco, NAVER: runNaver, RULIWEB: runRuliweb,
+    FEMCO: runFemco, NAVER: runNaver, RULIWEB: runRuliweb, NAVER_KIN: runNaverKin,
     QUASARZONE: runQuasarzone, ARCALIVE: runArcalive, INVEN: runInven,
     DOGDRIP: runDogdrip, DCINSIDE: runDcinside, DONPPU: runDonppu, DAUM: runDaum,
     DIMITORY: runDimitory, FANCUG: runFancug, THREDIC: runThredic, ETOLAND: runEtoland,
