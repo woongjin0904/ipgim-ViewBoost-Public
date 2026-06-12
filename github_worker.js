@@ -26,6 +26,7 @@ const runEomisae = require('./boosters/eomisae');
 const runMimint = require('./boosters/mimint');
 const runJayoung = require('./boosters/jayoung');
 const runNaverKin = require('./boosters/naver_kin');
+const runBlind = require('./boosters/blind');
 
 const stealth = StealthPlugin();
 stealth.enabledEvasions.delete('user-agent-override');
