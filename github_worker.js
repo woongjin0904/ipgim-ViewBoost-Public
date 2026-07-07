@@ -28,6 +28,11 @@ const runJayoung = require('./boosters/jayoung');
 const runNaverKin = require('./boosters/naver_kin');
 const runBlind = require('./boosters/blind');
 const runYgosu = require('./boosters/ygosu');
+const runDealbada = require('./boosters/dealbada');
+const runTe31 = require('./boosters/te');
+const runZod = require('./boosters/zod');
+const runDasaja = require('./boosters/dasaja');
+const runDeokjil = require('./boosters/deokjil');
 
 const stealth = StealthPlugin();
 stealth.enabledEvasions.delete('user-agent-override');
@@ -40,7 +45,9 @@ const boosters = {
     DOGDRIP: runDogdrip, DCINSIDE: runDcinside, DONPPU: runDonppu, DAUM: runDaum,
     DIMITORY: runDimitory, FANCUG: runFancug, THREDIC: runThredic, ETOLAND: runEtoland,
     NATEPANN: runNatepann, BOBAEDREAM: runBobaedream, MLBPARK: runMlbpark,
-    EOMISAE: runEomisae, MIMINT: runMimint, JAYOUNG: runJayoung
+    EOMISAE: runEomisae, MIMINT: runMimint, JAYOUNG: runJayoung,
+    BLIND: runBlind, DEALBADA: runDealbada, TE31: runTe31, ZOD: runZod,
+    DASAJA: runDasaja, DEOKJIL: runDeokjil
 };
 
 async function start() {
@@ -104,93 +111,15 @@ async function start() {
                 const page = await (context === browser ? browser.newPage() : context.newPage());
                 
                 page.setDefaultNavigationTimeout(45000);
-                const userAgent = new UserAgent({ deviceCategory: 'desktop' });
-                await page.setUserAgent(userAgent.toString());
+                page.setDefaultNavigationTimeout(45000);
 
-                await page.evaluateOnNewDocument(() => {
-                // 1. 완벽한 window.chrome 모방 (메서드까지 흉내 내기)
-                window.chrome = {
-                    app: {
-                        isInstalled: false,
-                        InstallState: {
-                            DISABLED: 'disabled',
-                            ERROR_MAC_FORBIDDEN: 'error_mac_forbidden',
-                            ERROR_INVALID_URL: 'error_invalid_url',
-                            ERROR_CONFLICTING_REQUEST: 'error_conflicting_request',
-                            ERROR_NOT_SUPPORTED: 'error_not_supported',
-                            ERROR_ALREADY_REQUESTED: 'error_already_requested',
-                            INSTALLED: 'installed',
-                            NOT_INSTALLED: 'not_installed'
-                        },
-                        RunningState: {
-                            CANNOT_RUN: 'cannot_run',
-                            READY_TO_RUN: 'ready_to_run',
-                            RUNNING: 'running'
-                        },
-                        getDetails: function() {},
-                        getIsInstalled: function() {},
-                        installState: function() {},
-                        isDetailsAvailable: function() {},
-                        runningState: function() {}
-                    },
-                    csi: function() {},
-                    loadTimes: function() {},
-                    runtime: {}
-                };
+                // 무작위 UA 대신 신뢰도 높은 최신 Chrome UA 고정 사용 (Stealth 플러그인과 궁합이 좋음)
+                await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
-                // 2. Webdriver 흔적 완벽 제거 (false보다 undefined가 더 자연스럽습니다)
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined,
-                });
-
-                // 3. 플러그인 속이기
-                // Headless 크롬은 플러그인이 0개지만, 실제 크롬은 PDF 뷰어 등을 기본으로 가집니다.
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => [
-                        {
-                            0: {type: "application/x-google-chrome-pdf", suffixes: "pdf", description: "Portable Document Format", enabledPlugin: Plugin},
-                            description: "Portable Document Format",
-                            filename: "internal-pdf-viewer",
-                            length: 1,
-                            name: "Chrome PDF Plugin"
-                        },
-                        {
-                            0: {type: "application/pdf", suffixes: "pdf", description: "", enabledPlugin: Plugin},
-                            description: "",
-                            filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai",
-                            length: 1,
-                            name: "Chrome PDF Viewer"
-                        }
-                    ],
-                });
-
-                // 4. 언어 설정 (한국어 유저처럼 보이기)
-                // Headless 크롬은 가끔 'en-US'로만 잡히는 경우가 있어 강제 세팅이 필요합니다.
-                Object.defineProperty(navigator, 'languages', {
-                    get: () => ['ko-KR', 'ko', 'en-US', 'en'],
-                });
-                
-                // 5. WebGL 그래픽 카드 벤더 속이기 (핵심!)
-                // Headless 모드일 때 그래픽카드가 "Google SwiftShader"로 뜨면 바로 봇으로 컷당합니다.
-                const getParameter = WebGLRenderingContext.prototype.getParameter;
-                WebGLRenderingContext.prototype.getParameter = function(parameter) {
-                    // 37445 === UNMASKED_VENDOR_WEBGL
-                    if (parameter === 37445) {
-                        return 'Intel Inc.'; // 흔한 내장 그래픽 제조사로 위장
-                    }
-                    // 37446 === UNMASKED_RENDERER_WEBGL
-                    if (parameter === 37446) {
-                        return 'Intel Iris OpenGL Engine'; // 흔한 그래픽카드 렌더러로 위장
-                    }
-                    return getParameter.call(this, parameter);
-                };
-                    // 권한(Permissions) API 모방 (알림 권한 거부 상태로)
-                    const originalQuery = window.navigator.permissions.query;
-                    return window.navigator.permissions.query = (parameters) => (
-                        parameters.name === 'notifications' ?
-                            Promise.resolve({ state: Notification.permission }) :
-                            originalQuery(parameters)
-                    );
+                // 우회를 위한 기본 헤더 추가
+                await page.setExtraHTTPHeaders({
+                    'referer': 'https://www.google.com/',
+                    'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
                 });
 
                 await page.setRequestInterception(true);

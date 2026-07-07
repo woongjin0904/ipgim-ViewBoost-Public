@@ -1,19 +1,12 @@
 module.exports = async (page, url) => {
     try {
-        const client = await page.target().createCDPSession();
-        await client.send('Network.clearBrowserCookies');
-        await client.send('Network.clearBrowserCache');
+        // ✅ 페이지 이동 로직 복구
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+        
+        // 약간의 대기 시간 (선택 사항)
+        await new Promise(r => setTimeout(r, 2000));
 
-        await page.setUserAgent('Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36');
-        await page.setViewport({ width: 412, height: 915, isMobile: true, hasTouch: true });
-
-        await page.setExtraHTTPHeaders({ 
-            'referer': 'https://www.google.com/search?q=theqoo',
-            'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8'
-        });
-
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 35000 });
-
+        // ✅ 사람처럼 스크롤을 내리는 작업 수행
         await page.evaluate(async () => {
             const loops = 3 + Math.floor(Math.random() * 3);
             for (let i = 0; i < loops; i++) {
@@ -22,6 +15,7 @@ module.exports = async (page, url) => {
             }
         });
 
+        // ✅ 페이지에 머무르는 체류 시간
         const stayTime = 5000 + Math.floor(Math.random() * 3000);
         await new Promise(r => setTimeout(r, stayTime));
 
@@ -31,8 +25,6 @@ module.exports = async (page, url) => {
         return false;
     }
 };
-
-
 
 // const path = require('path');
 
