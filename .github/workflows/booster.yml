@@ -17,6 +17,10 @@ on:
       user_id:
         description: 'Requested User ID'
         required: true
+      delay:                    
+        description: 'Delay seconds'
+        required: false  
+        default: '5'
 
 concurrency:
   group: viewboost-${{ inputs.user_id }}
