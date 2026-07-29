@@ -56,6 +56,7 @@ async function start() {
     const siteType = process.argv[3];
     const totalCount = parseInt(process.argv[4] || "0");
     const userId = process.argv[5] || "UnknownUser"; 
+    const delay = parseInt(process.argv[6] || "5", 10);
     const workerId = parseInt(process.env.WORKER_ID || "1");
 
     if (!targetUrl || totalCount <= 0) {
