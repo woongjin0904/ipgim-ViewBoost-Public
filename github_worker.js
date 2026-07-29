@@ -75,6 +75,25 @@ async function start() {
 
     console.log(`🚀 [사용자: ${userId}] 워커 ${workerId} 가동 (대상: ${siteType}, 목표: ${myIterations}회)`);
 
+    // 💡 [최적화 1] 반복문 진입 전 MongoDB 커넥션을 딱 1번만 연결합니다.
+    const { MongoClient } = require('mongodb');
+    const uri = process.env.MONGODB_URI;
+    let dbClient = null;
+    let progressCollection = null;
+
+    if (uri) {
+        try {
+            dbClient = new MongoClient(uri);
+            await dbClient.connect();
+            progressCollection = dbClient.db('global_auth_center').collection('cloud_progress');
+            console.log(`[${userId}][W${workerId}] MongoDB 실시간 집계 연결 성공`);
+        } catch (initDbErr) {
+            console.error(`[${userId}][W${workerId}] MongoDB 초기 연결 실패:`, initDbErr.message);
+        }
+    } else {
+        console.log("[MongoDB 오류] MONGODB_URI 환경변수가 누락되었습니다.");
+    }
+
     const launchBrowser = async (retries = 3) => {
         for (let i = 0; i < retries; i++) {
             try {
@@ -112,7 +131,7 @@ async function start() {
                 const page = await (context === browser ? browser.newPage() : context.newPage());
                 
                 page.setDefaultNavigationTimeout(45000);
-                page.setDefaultNavigationTimeout(45000);
+                page.setDefaultTimeout(45000);
 
                 // 무작위 UA 대신 신뢰도 높은 최신 Chrome UA 고정 사용 (Stealth 플러그인과 궁합이 좋음)
                 await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
@@ -134,10 +153,9 @@ async function start() {
                 });
 
                 const runBooster = boosters[siteType];
-                let isSuccess = false; // 💡 성공 여부 추적 변수 추가
+                let isSuccess = false;
 
                 if (runBooster) {
-                    // 💡 .then(() => true)를 통해 성공 기록
                     isSuccess = await runBooster(page, targetUrl, (msg) => 
                         console.log(`[${userId}][W${workerId}] ${msg}`)
                     ).then(() => true).catch(e => {
@@ -152,34 +170,21 @@ async function start() {
                 if (context !== browser) await context.close().catch(() => {});
                 else await page.close().catch(() => {});
 
-                // 💡 MongoDB 카운트 적재 로직 추가
-                if (isSuccess) {
-                    const { MongoClient } = require('mongodb');
-                    const uri = process.env.MONGODB_URI;
-                    
-                    if (!uri) {
-                        console.log("[MongoDB 오류] MONGODB_URI 환경변수가 누락되었습니다.");
-                    } else {
-                        const client = new MongoClient(uri);
-                        try {
-                            await client.connect();
-                            const db = client.db('global_auth_center');
-                            
-                            await db.collection('cloud_progress').updateOne(
-                                { userId: userId, url: targetUrl, siteName: siteType },
-                                { $inc: { count: 1 }, $set: { updatedAt: new Date() } },
-                                { upsert: true }
-                            );
-                            console.log(`[MongoDB 기록] ${siteType} 카운트 1 누적 완료`);
-                        } catch (dbErr) {
-                            console.log(`[MongoDB 기록 실패]: ${dbErr.message}`);
-                        } finally {
-                            await client.close();
-                        }
+                // 💡 [최적화 2] 매 루프마다 연결하지 않고 이미 연결된 progressCollection 재사용 (유실 0%)
+                if (isSuccess && progressCollection) {
+                    try {
+                        await progressCollection.updateOne(
+                            { userId: userId, url: targetUrl, siteName: siteType },
+                            { $inc: { count: 1 }, $set: { updatedAt: new Date() } },
+                            { upsert: true }
+                        );
+                        console.log(`[MongoDB 기록] ${siteType} 카운트 1 누적 완료`);
+                    } catch (dbErr) {
+                        console.log(`[MongoDB 기록 실패]: ${dbErr.message}`);
                     }
                 }
                 
-                // 💡 delay 변수를 활용한 대기 시간
+                // delay 변수를 활용한 대기 시간
                 await new Promise(r => setTimeout(r, (delay * 1000) + Math.random() * 2000));
 
             } catch (iterationError) {
@@ -191,6 +196,8 @@ async function start() {
         console.error(`[${userId}][W${workerId}] 치명적 에러:`, e.message);
     } finally {
         if (browser) await browser.close().catch(() => {});
+        // 💡 [최적화 3] 워커 종료 시 DB 커넥션을 1회 안전하게 닫아줌
+        if (dbClient) await dbClient.close().catch(() => {});
         console.log(`🏁 [${userId}][W${workerId}] 작업 완료 및 종료.`);
         process.exit(0);
     }
