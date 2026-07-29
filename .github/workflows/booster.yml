@@ -48,13 +48,14 @@ jobs:
         env:
           PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'true'
         run: |
-          npm install puppeteer-extra puppeteer-extra-plugin-stealth user-agents
+          npm install puppeteer-extra puppeteer-extra-plugin-stealth user-agents mongodb axios
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable libgbm-dev
 
       - name: Run Worker
         env:
           WORKER_ID: ${{ matrix.worker_id }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
         run: |
           DELAY=$((1 + RANDOM % 60))
           echo "Waiting for $DELAY seconds..."

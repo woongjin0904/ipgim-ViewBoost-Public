@@ -134,11 +134,15 @@ async function start() {
                 });
 
                 const runBooster = boosters[siteType];
+                let isSuccess = false; // 💡 성공 여부 추적 변수 추가
+
                 if (runBooster) {
-                    await runBooster(page, targetUrl, (msg) => 
+                    // 💡 .then(() => true)를 통해 성공 기록
+                    isSuccess = await runBooster(page, targetUrl, (msg) => 
                         console.log(`[${userId}][W${workerId}] ${msg}`)
-                    ).catch(e => {
+                    ).then(() => true).catch(e => {
                         console.log(`[${userId}][W${workerId}] 시도 실패: ${e.message}`);
+                        return false;
                     });
                 } else {
                     console.log(`[${userId}][W${workerId}] 미지원 사이트: ${siteType}`);
@@ -148,7 +152,35 @@ async function start() {
                 if (context !== browser) await context.close().catch(() => {});
                 else await page.close().catch(() => {});
 
-                await new Promise(r => setTimeout(r, 1500 + Math.random() * 2500));
+                // 💡 MongoDB 카운트 적재 로직 추가
+                if (isSuccess) {
+                    const { MongoClient } = require('mongodb');
+                    const uri = process.env.MONGODB_URI;
+                    
+                    if (!uri) {
+                        console.log("[MongoDB 오류] MONGODB_URI 환경변수가 누락되었습니다.");
+                    } else {
+                        const client = new MongoClient(uri);
+                        try {
+                            await client.connect();
+                            const db = client.db('global_auth_center');
+                            
+                            await db.collection('cloud_progress').updateOne(
+                                { userId: userId, url: targetUrl, siteName: siteType },
+                                { $inc: { count: 1 }, $set: { updatedAt: new Date() } },
+                                { upsert: true }
+                            );
+                            console.log(`[MongoDB 기록] ${siteType} 카운트 1 누적 완료`);
+                        } catch (dbErr) {
+                            console.log(`[MongoDB 기록 실패]: ${dbErr.message}`);
+                        } finally {
+                            await client.close();
+                        }
+                    }
+                }
+                
+                // 💡 delay 변수를 활용한 대기 시간
+                await new Promise(r => setTimeout(r, (delay * 1000) + Math.random() * 2000));
 
             } catch (iterationError) {
                 console.error(`[${userId}][W${workerId}] 에러 발생:`, iterationError.message);
