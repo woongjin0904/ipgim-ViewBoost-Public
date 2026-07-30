@@ -23,8 +23,8 @@ on:
         default: '5'
 
 concurrency:
-  group: viewboost-${{ inputs.user_id }}
-  cancel-in-progress: true
+  group: viewboost-${{ inputs.user_id }}-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   boost:
