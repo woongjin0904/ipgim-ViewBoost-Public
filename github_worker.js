@@ -46,7 +46,7 @@ const boosters = {
     DOGDRIP: runDogdrip, DCINSIDE: runDcinside, DONPPU: runDonppu, DAUM: runDaum,
     DIMITORY: runDimitory, FANCUG: runFancug, THREDIC: runThredic, ETOLAND: runEtoland,
     NATEPANN: runNatepann, BOBAEDREAM: runBobaedream, MLBPARK: runMlbpark,
-    EOMISAE: runEomisae, MIMINT: runMimint, JAYOUNG: runJayoung, YGOSU: runYgosu
+    EOMISAE: runEomisae, MIMINT: runMimint, JAYOUNG: runJayoung, YGOSU: runYgosu,
     BLIND: runBlind, DEALBADA: runDealbada, TE31: runTe31, ZOD: runZod,
     DASAJA: runDasaja, DEOKJIL: runDeokjil,     SLRCLUB: runSlrclub,
 };
