@@ -48,7 +48,7 @@ const boosters = {
     NATEPANN: runNatepann, BOBAEDREAM: runBobaedream, MLBPARK: runMlbpark,
     EOMISAE: runEomisae, MIMINT: runMimint, JAYOUNG: runJayoung,
     BLIND: runBlind, DEALBADA: runDealbada, TE31: runTe31, ZOD: runZod,
-    DASAJA: runDasaja, DEOKJIL: runDeokjil,  SLRCLUB: runSlrclub, YGOSU: runYgosu
+    DASAJA: runDasaja, DEOKJIL: runDeokjil,     SLRCLUB: runSlrclub,
 };
 
 async function start() {
@@ -76,7 +76,7 @@ async function start() {
 
     console.log(`🚀 [사용자: ${userId}] 워커 ${workerId} 가동 (대상: ${siteType}, 목표: ${myIterations}회)`);
 
-    // MongoDB 연결 (1회)
+    // 💡 [최적화 1] 반복문 진입 전 MongoDB 커넥션을 딱 1번만 연결합니다.
     const { MongoClient } = require('mongodb');
     const uri = process.env.MONGODB_URI;
     let dbClient = null;
@@ -103,9 +103,14 @@ async function start() {
                     headless: "new",
                     timeout: 60000, 
                     args: [
-                        '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-                        '--disable-blink-features=AutomationControlled', '--window-size=1280,800',
-                        '--disable-gpu', '--no-first-run', '--js-flags="--max-old-space-size=512"'
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-blink-features=AutomationControlled',
+                        '--window-size=1280,800',
+                        '--disable-gpu',
+                        '--no-first-run',
+                        '--js-flags="--max-old-space-size=512"'
                     ]
                 });
             } catch (e) {
@@ -116,106 +121,107 @@ async function start() {
         }
     };
 
-    const browser = await launchBrowser();
+// 💡 [큐(Batch) 로직 적용] 100개 단위로 쪼개어 브라우저를 재시작합니다.
+    const CHUNK_SIZE = 100;
+    const totalChunks = Math.ceil(myIterations / CHUNK_SIZE);
 
     try {
-        // 💡 [큐 분할 설정] 와이고수는 100개씩, 나머지는 기존처럼 전체 진행
-        const BATCH_SIZE = siteType === 'YGOSU' ? 100 : myIterations; 
-        const tasks = Array.from({ length: myIterations }, (_, i) => i + 1);
+        for (let chunk = 0; chunk < totalChunks; chunk++) {
+            const currentChunkSize = Math.min(CHUNK_SIZE, myIterations - (chunk * CHUNK_SIZE));
+            console.log(`\n📦 [${userId}][W${workerId}] ${chunk + 1}/${totalChunks} 번째 큐 시작 (크기: ${currentChunkSize}개)`);
+            
+            // 큐마다 새 브라우저를 띄워 메모리 누수 원천 차단
+            let browser = await launchBrowser();
 
-        for (let q = 0; q < tasks.length; q += BATCH_SIZE) {
-            const currentQueue = tasks.slice(q, q + BATCH_SIZE);
-            const queueNumber = Math.floor(q / BATCH_SIZE) + 1;
-            const totalQueues = Math.ceil(tasks.length / BATCH_SIZE);
-
-            if (siteType === 'YGOSU') {
-                console.log(`\n📦 [${userId}][W${workerId}] YGOSU 큐 ${queueNumber}/${totalQueues} 시작 (할당량: ${currentQueue.length}개)`);
-            }
-
-            // 큐(100개 묶음) 내부 반복
-            for (const taskNum of currentQueue) {
-                try {
-                    console.log(`[${userId}][W${workerId}] 진행: ${taskNum}/${myIterations} (현재 큐: ${queueNumber}번)`);
-
-                    let context = await browser.createIncognitoBrowserContext().catch(() => browser);
-                    const page = await (context === browser ? browser.newPage() : context.newPage());
+            try {
+                for (let i = 1; i <= currentChunkSize; i++) {
+                    const globalIndex = (chunk * CHUNK_SIZE) + i;
                     
-                    page.setDefaultNavigationTimeout(45000);
-                    page.setDefaultTimeout(45000);
+                    try {
+                        console.log(`[${userId}][W${workerId}] 진행: 전체 ${globalIndex}/${myIterations} (현재 큐: ${i}/${currentChunkSize})`);
 
-                    await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-                    await page.setExtraHTTPHeaders({
-                        'referer': 'https://www.google.com/',
-                        'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
-                    });
+                        let context = await browser.createIncognitoBrowserContext().catch(() => browser);
+                        const page = await (context === browser ? browser.newPage() : context.newPage());
+                        
+                        page.setDefaultNavigationTimeout(45000);
+                        page.setDefaultTimeout(45000);
 
-                    await page.setRequestInterception(true);
-                    page.on('request', (req) => {
-                        const url = req.url();
-                        const type = req.resourceType();
-                        const allowedDomains = ['naver.com', 'naver.net', 'daum.net', 'daumcdn.net', 'kakao.com', 'nate.com'];
-                        if (allowedDomains.some(domain => url.includes(domain))) return req.continue();
-                        if (['image', 'font', 'media'].includes(type)) return req.abort();
-                        req.continue();
-                    });
+                        // 무작위 UA 대신 신뢰도 높은 최신 Chrome UA 고정 사용 (Stealth 플러그인과 궁합이 좋음)
+                        await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
-                    const runBooster = boosters[siteType];
-                    let isSuccess = false;
-
-                    if (runBooster) {
-                        isSuccess = await runBooster(page, targetUrl, (msg) => 
-                            console.log(`[${userId}][W${workerId}] ${msg}`)
-                        ).then(() => true).catch(e => {
-                            console.log(`[${userId}][W${workerId}] 시도 실패: ${e.message}`);
-                            return false;
+                        // 우회를 위한 기본 헤더 추가
+                        await page.setExtraHTTPHeaders({
+                            'referer': 'https://www.google.com/',
+                            'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
                         });
-                    } else {
-                        console.log(`[${userId}][W${workerId}] 미지원 사이트: ${siteType}`);
-                        break; 
-                    }
-                    
-                    if (context !== browser) await context.close().catch(() => {});
-                    else await page.close().catch(() => {});
 
-                    // MongoDB 진행률 업데이트
-                    if (isSuccess && progressCollection) {
-                        try {
-                            await progressCollection.updateOne(
-                                { userId: userId, url: targetUrl, siteName: siteType },
-                                { $inc: { count: 1 }, $set: { updatedAt: new Date() } },
-                                { upsert: true }
-                            );
-                            console.log(`[MongoDB 기록] ${siteType} 카운트 1 누적 완료`);
-                        } catch (dbErr) {
-                            console.log(`[MongoDB 기록 실패]: ${dbErr.message}`);
+                        await page.setRequestInterception(true);
+                        page.on('request', (req) => {
+                            const url = req.url();
+                            const type = req.resourceType();
+                            const allowedDomains = ['naver.com', 'naver.net', 'daum.net', 'daumcdn.net', 'kakao.com', 'nate.com'];
+                            if (allowedDomains.some(domain => url.includes(domain))) return req.continue();
+                            if (['image', 'font', 'media'].includes(type)) return req.abort();
+                            req.continue();
+                        });
+
+                        const runBooster = boosters[siteType];
+                        let isSuccess = false;
+
+                        if (runBooster) {
+                            isSuccess = await runBooster(page, targetUrl, (msg) => 
+                                console.log(`[${userId}][W${workerId}] ${msg}`)
+                            ).then(() => true).catch(e => {
+                                console.log(`[${userId}][W${workerId}] 시도 실패: ${e.message}`);
+                                return false;
+                            });
+                        } else {
+                            console.log(`[${userId}][W${workerId}] 미지원 사이트: ${siteType}`);
+                            break; 
                         }
+                        
+                        if (context !== browser) await context.close().catch(() => {});
+                        else await page.close().catch(() => {});
+
+                        // 💡 [최적화 2] 매 루프마다 연결하지 않고 이미 연결된 progressCollection 재사용 (유실 0%)
+                        if (isSuccess && progressCollection) {
+                            try {
+                                await progressCollection.updateOne(
+                                    { userId: userId, url: targetUrl, siteName: siteType },
+                                    { $inc: { count: 1 }, $set: { updatedAt: new Date() } },
+                                    { upsert: true }
+                                );
+                                console.log(`[MongoDB 기록] ${siteType} 카운트 1 누적 완료`);
+                            } catch (dbErr) {
+                                console.log(`[MongoDB 기록 실패]: ${dbErr.message}`);
+                            }
+                        }
+                        
+                        // delay 변수를 활용한 대기 시간
+                        await new Promise(r => setTimeout(r, (delay * 1000) + Math.random() * 2000));
+
+                    } catch (iterationError) {
+                        console.error(`[${userId}][W${workerId}] 에러 발생:`, iterationError.message);
+                        await new Promise(r => setTimeout(r, 5000));
                     }
-                    
-                    // 기본 딜레이
-                    await new Promise(r => setTimeout(r, (delay * 1000) + Math.random() * 2000));
-
-                } catch (iterationError) {
-                    console.error(`[${userId}][W${workerId}] 에러 발생:`, iterationError.message);
-                    await new Promise(r => setTimeout(r, 5000));
                 }
-            } // end of queue inner loop
-
-            // 💡 [큐 완료 후 휴식] 와이고수 전용 - 100개 완료 후 10~15초 휴식하여 밴 방지
-            if (siteType === 'YGOSU' && queueNumber < totalQueues) {
-                const queueDelay = 10000 + Math.random() * 5000;
-                console.log(`⏳ 큐 ${queueNumber} 완료. 다음 큐 진입 전 ${(queueDelay/1000).toFixed(1)}초 대기...`);
-                await new Promise(r => setTimeout(r, queueDelay));
+            } finally {
+                // 한 큐(최대 100개)가 끝나면 브라우저를 닫아 메모리를 확보합니다.
+                if (browser) await browser.close().catch(() => {});
+                console.log(`✅ [${userId}][W${workerId}] ${chunk + 1}번째 큐 완료. 다음 진행을 위해 5초 대기...`);
+                await new Promise(r => setTimeout(r, 5000));
             }
-        } // end of outer loop
+        }
     } catch (e) {
         console.error(`[${userId}][W${workerId}] 치명적 에러:`, e.message);
     } finally {
-        if (browser) await browser.close().catch(() => {});
+        // 💡 [최적화 3] 워커 종료 시 DB 커넥션을 1회 안전하게 닫아줌
         if (dbClient) await dbClient.close().catch(() => {});
         console.log(`🏁 [${userId}][W${workerId}] 작업 완료 및 종료.`);
         process.exit(0);
     }
 }
+
 start();
 
 
