@@ -121,100 +121,82 @@ async function start() {
         }
     };
 
-// 💡 [큐(Batch) 로직 적용] 100개 단위로 쪼개어 브라우저를 재시작합니다.
-    const CHUNK_SIZE = 100;
-    const totalChunks = Math.ceil(myIterations / CHUNK_SIZE);
+    const browser = await launchBrowser();
 
     try {
-        for (let chunk = 0; chunk < totalChunks; chunk++) {
-            const currentChunkSize = Math.min(CHUNK_SIZE, myIterations - (chunk * CHUNK_SIZE));
-            console.log(`\n📦 [${userId}][W${workerId}] ${chunk + 1}/${totalChunks} 번째 큐 시작 (크기: ${currentChunkSize}개)`);
-            
-            // 큐마다 새 브라우저를 띄워 메모리 누수 원천 차단
-            let browser = await launchBrowser();
-
+        for (let i = 1; i <= myIterations; i++) {
             try {
-                for (let i = 1; i <= currentChunkSize; i++) {
-                    const globalIndex = (chunk * CHUNK_SIZE) + i;
-                    
+                console.log(`[${userId}][W${workerId}] 진행: ${i}/${myIterations}`);
+
+                let context = await browser.createIncognitoBrowserContext().catch(() => browser);
+                const page = await (context === browser ? browser.newPage() : context.newPage());
+                
+                page.setDefaultNavigationTimeout(45000);
+                page.setDefaultTimeout(45000);
+
+                // 무작위 UA 대신 신뢰도 높은 최신 Chrome UA 고정 사용 (Stealth 플러그인과 궁합이 좋음)
+                await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+                // 우회를 위한 기본 헤더 추가
+                await page.setExtraHTTPHeaders({
+                    'referer': 'https://www.google.com/',
+                    'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
+                });
+
+                await page.setRequestInterception(true);
+                page.on('request', (req) => {
+                    const url = req.url();
+                    const type = req.resourceType();
+                    const allowedDomains = ['naver.com', 'naver.net', 'daum.net', 'daumcdn.net', 'kakao.com', 'nate.com'];
+                    if (allowedDomains.some(domain => url.includes(domain))) return req.continue();
+                    if (['image', 'font', 'media'].includes(type)) return req.abort();
+                    req.continue();
+                });
+
+                const runBooster = boosters[siteType];
+                let isSuccess = false;
+
+                if (runBooster) {
+                    isSuccess = await runBooster(page, targetUrl, (msg) => 
+                        console.log(`[${userId}][W${workerId}] ${msg}`)
+                    ).then(() => true).catch(e => {
+                        console.log(`[${userId}][W${workerId}] 시도 실패: ${e.message}`);
+                        return false;
+                    });
+                } else {
+                    console.log(`[${userId}][W${workerId}] 미지원 사이트: ${siteType}`);
+                    break; 
+                }
+                
+                if (context !== browser) await context.close().catch(() => {});
+                else await page.close().catch(() => {});
+
+                // 💡 [최적화 2] 매 루프마다 연결하지 않고 이미 연결된 progressCollection 재사용 (유실 0%)
+                if (isSuccess && progressCollection) {
                     try {
-                        console.log(`[${userId}][W${workerId}] 진행: 전체 ${globalIndex}/${myIterations} (현재 큐: ${i}/${currentChunkSize})`);
-
-                        let context = await browser.createIncognitoBrowserContext().catch(() => browser);
-                        const page = await (context === browser ? browser.newPage() : context.newPage());
-                        
-                        page.setDefaultNavigationTimeout(45000);
-                        page.setDefaultTimeout(45000);
-
-                        // 무작위 UA 대신 신뢰도 높은 최신 Chrome UA 고정 사용 (Stealth 플러그인과 궁합이 좋음)
-                        await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-
-                        // 우회를 위한 기본 헤더 추가
-                        await page.setExtraHTTPHeaders({
-                            'referer': 'https://www.google.com/',
-                            'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
-                        });
-
-                        await page.setRequestInterception(true);
-                        page.on('request', (req) => {
-                            const url = req.url();
-                            const type = req.resourceType();
-                            const allowedDomains = ['naver.com', 'naver.net', 'daum.net', 'daumcdn.net', 'kakao.com', 'nate.com'];
-                            if (allowedDomains.some(domain => url.includes(domain))) return req.continue();
-                            if (['image', 'font', 'media'].includes(type)) return req.abort();
-                            req.continue();
-                        });
-
-                        const runBooster = boosters[siteType];
-                        let isSuccess = false;
-
-                        if (runBooster) {
-                            isSuccess = await runBooster(page, targetUrl, (msg) => 
-                                console.log(`[${userId}][W${workerId}] ${msg}`)
-                            ).then(() => true).catch(e => {
-                                console.log(`[${userId}][W${workerId}] 시도 실패: ${e.message}`);
-                                return false;
-                            });
-                        } else {
-                            console.log(`[${userId}][W${workerId}] 미지원 사이트: ${siteType}`);
-                            break; 
-                        }
-                        
-                        if (context !== browser) await context.close().catch(() => {});
-                        else await page.close().catch(() => {});
-
-                        // 💡 [최적화 2] 매 루프마다 연결하지 않고 이미 연결된 progressCollection 재사용 (유실 0%)
-                        if (isSuccess && progressCollection) {
-                            try {
-                                await progressCollection.updateOne(
-                                    { userId: userId, url: targetUrl, siteName: siteType },
-                                    { $inc: { count: 1 }, $set: { updatedAt: new Date() } },
-                                    { upsert: true }
-                                );
-                                console.log(`[MongoDB 기록] ${siteType} 카운트 1 누적 완료`);
-                            } catch (dbErr) {
-                                console.log(`[MongoDB 기록 실패]: ${dbErr.message}`);
-                            }
-                        }
-                        
-                        // delay 변수를 활용한 대기 시간
-                        await new Promise(r => setTimeout(r, (delay * 1000) + Math.random() * 2000));
-
-                    } catch (iterationError) {
-                        console.error(`[${userId}][W${workerId}] 에러 발생:`, iterationError.message);
-                        await new Promise(r => setTimeout(r, 5000));
+                        await progressCollection.updateOne(
+                            { userId: userId, url: targetUrl, siteName: siteType },
+                            { $inc: { count: 1 }, $set: { updatedAt: new Date() } },
+                            { upsert: true }
+                        );
+                        console.log(`[MongoDB 기록] ${siteType} 카운트 1 누적 완료`);
+                    } catch (dbErr) {
+                        console.log(`[MongoDB 기록 실패]: ${dbErr.message}`);
                     }
                 }
-            } finally {
-                // 한 큐(최대 100개)가 끝나면 브라우저를 닫아 메모리를 확보합니다.
-                if (browser) await browser.close().catch(() => {});
-                console.log(`✅ [${userId}][W${workerId}] ${chunk + 1}번째 큐 완료. 다음 진행을 위해 5초 대기...`);
+                
+                // delay 변수를 활용한 대기 시간
+                await new Promise(r => setTimeout(r, (delay * 1000) + Math.random() * 2000));
+
+            } catch (iterationError) {
+                console.error(`[${userId}][W${workerId}] 에러 발생:`, iterationError.message);
                 await new Promise(r => setTimeout(r, 5000));
             }
         }
     } catch (e) {
         console.error(`[${userId}][W${workerId}] 치명적 에러:`, e.message);
     } finally {
+        if (browser) await browser.close().catch(() => {});
         // 💡 [최적화 3] 워커 종료 시 DB 커넥션을 1회 안전하게 닫아줌
         if (dbClient) await dbClient.close().catch(() => {});
         console.log(`🏁 [${userId}][W${workerId}] 작업 완료 및 종료.`);
