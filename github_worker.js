@@ -48,7 +48,8 @@ const boosters = {
     NATEPANN: runNatepann, BOBAEDREAM: runBobaedream, MLBPARK: runMlbpark,
     EOMISAE: runEomisae, MIMINT: runMimint, JAYOUNG: runJayoung, YGOSU: runYgosu,
     BLIND: runBlind, DEALBADA: runDealbada, TE31: runTe31, ZOD: runZod,
-    DASAJA: runDasaja, DEOKJIL: runDeokjil,     SLRCLUB: runSlrclub,
+    DASAJA: runDasaja, DEOKJIL: runDeokjil, SLRCLUB: runSlrclub,
+    NAVER_STOCK: runNaverStock
 };
 
 async function start() {
