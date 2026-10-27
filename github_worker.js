@@ -34,6 +34,7 @@ const runZod = require('./boosters/zod');
 const runDasaja = require('./boosters/dasaja');
 const runDeokjil = require('./boosters/deokjil');
 const runSlrclub = require('./boosters/slrclub');
+const runNaverStock = require('./boosters/naver_stock');
 
 const stealth = StealthPlugin();
 stealth.enabledEvasions.delete('user-agent-override');
